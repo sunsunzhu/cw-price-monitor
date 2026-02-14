@@ -1,0 +1,35 @@
+name: CW Price Monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # 每30分钟（UTC）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install requests beautifulsoup4
+
+      - name: Run script
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python monitor_cw_aosept.py
+
+      - name: Commit state update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cw_aosept_price_state.json
+          git diff --cached --quiet || git commit -m "chore: update price state"
+          git push
