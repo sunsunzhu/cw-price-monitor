@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 PRODUCT_URL = "https://www.chemistwarehouse.co.nz/buy/141690/aosept-plus-hydraglyde-twin-pack-2-x-360ml"
 STATE_FILE = "cw_aosept_price_state.json"
 TIMEOUT_SECONDS = 20
+MAX_RETRIES = 3
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -18,11 +20,33 @@ USER_AGENT = (
 
 
 def fetch_current_price() -> float:
-    response = requests.get(
-        PRODUCT_URL,
-        timeout=TIMEOUT_SECONDS,
-        headers={"User-Agent": USER_AGENT},
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-NZ,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Referer": "https://www.chemistwarehouse.co.nz/",
+        }
     )
+
+    response = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        response = session.get(PRODUCT_URL, timeout=TIMEOUT_SECONDS)
+        if response.status_code != 403:
+            break
+        if attempt < MAX_RETRIES:
+            time.sleep(2 * attempt)
+
+    if response is None:
+        raise RuntimeError("No HTTP response received")
+    if response.status_code == 403:
+        raise RuntimeError(
+            "Target site blocked this runtime IP (HTTP 403). "
+            "This is common on cloud runners; use another host or browser-based fetching."
+        )
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
